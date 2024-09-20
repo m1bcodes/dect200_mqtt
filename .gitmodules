@@ -1,0 +1,3 @@
+[submodule "PyDect200"]
+	path = PyDect200
+	url = https://github.com/mperlet/PyDect200.git
