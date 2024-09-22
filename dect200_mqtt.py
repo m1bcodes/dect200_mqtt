@@ -5,6 +5,7 @@ import time
 import datetime
 import paho.mqtt.client as mqtt
 from PyDect200 import PyDect200
+import json
 
 def check_positive(value):
     ivalue = int(value)
@@ -22,6 +23,7 @@ def parseCommandLine():
     parser.add_argument("--fritzpw", required=True)
     parser.add_argument("--mqttbroker", required=True, help="Name or address of the mqtt broker. Default port will be used.")
     parser.add_argument("--interval", required=False, default=30, type=check_positive, help="interval between polls and updates sent. Default: 30 seconds, which is the update rate for power measurement.")
+    parser.add_argument("-t", "--topic", required=False, default="dect200", help="mqtt topic. (default 'dect200')")
     parser.add_argument("-v", "--verbose", action='store_true', default=False, help="provides more output and diagnostic messages.")
     args = parser.parse_args()
     return args        
@@ -37,8 +39,24 @@ def on_connect(client, userdata, flags, reason_code, properties):
 def on_message(client, userdata, msg):
     print(msg.topic+" "+str(msg.payload))
    
+def readDect(dect : PyDect200.PyDect200, devId : str) -> dict:
+    m = dict()
+    m["devId"] = devId
+    m["devName"] =  dect.get_device_name(devId)
+    m["energy"] = dect.get_energy_single(devId)
+    m["power"] = dect.get_power_single(devId)
+    m["temperature"] = dect.get_temperature_single(devId)
+    m["status"] = dect.get_state(devId)
+    return m
+
 def convertStringToTopic(s : str) -> str:
-    return "Device1"
+    outStr = ""
+    for ch in s:
+        if ch.isalnum():
+            outStr += ch
+        elif len(outStr)==0 or outStr[-1]!='_':
+            outStr += '_'
+    return outStr
 
 if __name__ == "__main__":      
     args = parseCommandLine()
@@ -51,6 +69,7 @@ if __name__ == "__main__":
     if args.verbose:
         mqttc.on_connect = on_connect
         mqttc.on_message = on_message
+
     if args.verbose:
         mqttc.enable_logger()        
     mqttc.connect(args.mqttbroker, 1883, 60)
@@ -58,30 +77,14 @@ if __name__ == "__main__":
 
     while True:
         devIds = dect.get_device_ids()
-        if args.verbose:
-            print(devIds)
-
         for devId in devIds:
-            devName =  dect.get_device_name(devId)
-            energy = dect.get_energy_single(devId)
-            power = dect.get_power_single(devId)
-            temperature = dect.get_temperature_single(devId)
-            status = dect.get_state(devId)
-
-            if True or args.verbose:
-                print(datetime.datetime.now(), ": Device id: ", devId)
-                print("Device name: " ,devName)
-                print("Energy: ", energy)
-                print("Power: ", power)
-                print("Temperature: ", temperature)
-                print("Status: ", status)
-                print("")
-
-            topic = "dect200/" + convertStringToTopic(devName) + "/"
-            mqttc.publish(topic + "energy", energy)
-            mqttc.publish(topic + "power", power)
-            mqttc.publish(topic + "temperature", temperature)
-            mqttc.publish(topic + "status", status)
+            m = readDect(dect, devId)
+            
+            jsonString = json.dumps(m)
+            topic = args.topic + "/" + convertStringToTopic(m["devName"])
+            if args.verbose:
+                print("%s: %s: %s" % (datetime.datetime.now(), topic, jsonString))
+            mqttc.publish(topic, jsonString)
 
         time.sleep(args.interval)
 
