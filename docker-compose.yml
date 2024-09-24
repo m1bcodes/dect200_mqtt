@@ -1,0 +1,9 @@
+services:
+  dect200_mqtt:
+    build: .
+    environment:
+      FRITZUSER: "fritzXXXX"
+      FRITZPW: "YYYY"
+      INTERVAL: "30"
+      MQTT_BROKER: "<ip address>"
+
